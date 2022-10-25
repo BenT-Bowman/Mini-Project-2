@@ -51,7 +51,8 @@ found:
   //initialize for all process the variable for number of tickets that you define in proc.h equal to 1
   // initialize the number of times the process is scheudle in the cpu equal to 0
    p -> numTicks =1;
-   p -> numTickets =0;
+   p -> numTickets =10;
+   p -> pass = 0;
   //get the names of these variables from proc.h 
   /////////////////////////////////////////////////////
 
@@ -171,7 +172,7 @@ fork(void)
   ///np->number of tickets  = something like the parent -> number of tickets
   ///get the exact the name fo number of tickets from proc.h the parent from the previous comment or some lines above
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////		
-
+  np->numTickets = proc->numTickets;
 
  
   pid = np->pid;
@@ -284,6 +285,10 @@ void
 scheduler(void)
 {
   struct proc *p;
+  struct proc *winner; // Process with lowest stride
+  int lastWinnerPID = 0
+  int lastWinnerRunCount = 0 // We cannot let one process run too many times in a row
+  int strideNumerator = 10000 // Get stride value of process by dividing this num by num of tickets
 
   for(;;){
     // Enable interrupts on this processor.
@@ -294,7 +299,7 @@ scheduler(void)
     // int totaltickets =0;
     //add any other variable you need for program
     ///////////////////////////////////////////// 
-   
+
     sti();
 
     
@@ -305,27 +310,48 @@ scheduler(void)
     //////////////////////////////////////////////
 
  
-    // Loop over process table looking for process to run.
+    // Loop over process table looking for RUNNABLE process with lowest pass value.
     acquire(&ptable.lock);
+    winner = ptable.proc; // TODO: Figure out how to prevent system from trying to run first process when no RUNNABLE processes
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
+      if(p->pass < winner->pass){
+	if(p->pid == lastWinnerPID){
+	  if(lastWinnerRunCount >= 5){ //Do not let process run for more than 5 quantums in a row
+	    continue;
+	  }
+	  else{
+	    lastWinnerRunCount++;
+	  }
+        else{
+	  lastWinnerRunCount = 0;
+	}
+	winner = p;
+	lastWinnerPid = winner->pid;
+      }
     }
-    release(&ptable.lock);
+    // Normalize all process pass values such that winner pass = 0 (prevent integer overflows from screwing thigns up)
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      p->pass = p->pass - winner->pass;
+    }
+    // Update chosen process's information
+    winner->pass = winner->pass + strideNumerator/(winner->numTickets)
+    winner->numTicks++;
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    proc = winner;
+    switchuvm(winner);
+    winner->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
 
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+    
+    release(&ptable.lock);
   }
 }
 
@@ -333,13 +359,13 @@ scheduler(void)
 ////Assign the tickets passed by the user to variable number of tickets of the process, 
 ///check the name of this variable in proc.h
 ///////////////////////////////////////////////////////////////////////////////////////
-int settickets(int passTickets)
+int settickets(int tickets)
 {
 	//make validation here, if you want 
-	if(passTickets < 1 || passTickets == NULL){
+	if(tickets < 10 || tickets > 200 || tickets == NULL){
 		return -1;
 	}
-	proc->numTickets  = passTickets;
+	proc->numTickets = passtickets;
 	return 0;
 }
 ////////////////////////////////////////////////////////////////

@@ -76,7 +76,7 @@ struct proc {
   char name[16];               // Process name (debugging)
   int numTickets;		// number of process tickets --> my code
   int numTicks;			// time slices scheduled in CPU --> my codeU
-  
+  int pass;			// pass value of process for stride scheduler
 
 
 
