@@ -77,6 +77,7 @@ struct proc {
   int numTickets;		// number of process tickets --> my code
   int numTicks;			// time slices scheduled in CPU --> my codeU
   int pass;			// pass value of process for stride scheduler
+  int stride;			// stride value of process for stride scheduler
 
 
 

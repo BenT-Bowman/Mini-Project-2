@@ -20,6 +20,8 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+int strideNumerator = 10000;
+
 void
 pinit(void)
 {
@@ -50,8 +52,8 @@ found:
   /////// your code here//////////////////////////////
   //initialize for all process the variable for number of tickets that you define in proc.h equal to 1
   // initialize the number of times the process is scheudle in the cpu equal to 0
-   p -> numTicks =1;
-   p -> numTickets =10;
+   p -> numTicks = MINTICKETS;
+   p -> numTickets = MAXTICKETS;
    p -> pass = 0;
   //get the names of these variables from proc.h 
   /////////////////////////////////////////////////////
@@ -285,10 +287,11 @@ void
 scheduler(void)
 {
   struct proc *p;
-  struct proc *winner; // Process with lowest stride
-  int lastWinnerPID = 0
-  int lastWinnerRunCount = 0 // We cannot let one process run too many times in a row
-  int strideNumerator = 10000 // Get stride value of process by dividing this num by num of tickets
+  struct proc *pSelected; // Process chosen to run
+  int lowestPass = 0;
+  int lastSelectedPID = 0;
+  int lastSelectedRunCount = 0; // We cannot let one process run too many times in a row
+  int runnableCount = 0;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -311,39 +314,48 @@ scheduler(void)
 
  
     // Loop over process table looking for RUNNABLE process with lowest pass value.
+    runnableCount = 0;
+    lowestPass = MAXTICKETS;
     acquire(&ptable.lock);
-    winner = ptable.proc; // TODO: Figure out how to prevent system from trying to run first process when no RUNNABLE processes
+    pSelected = NULL;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
-      if(p->pass < winner->pass){
-	if(p->pid == lastWinnerPID){
-	  if(lastWinnerRunCount >= 5){ //Do not let process run for more than 5 quantums in a row
+      else{
+        runnableCount++;
+      }
+      if(p->pass < lowestPass){
+	lowestPass = p
+      }
+      if(p->pass < pSelected->pass){
+	if(p->pid == lastSelectedPID){
+	  if(lastSelectedRunCount >= 5 && runnableCount != 1){
 	    continue;
 	  }
-	  else{
-	    lastWinnerRunCount++;
-	  }
-        else{
-	  lastWinnerRunCount = 0;
 	}
-	winner = p;
-	lastWinnerPid = winner->pid;
+	pSelected = p;
       }
+    }
+    if(runnableCount == 0){
+      continue;
     }
     // Normalize all process pass values such that winner pass = 0 (prevent integer overflows from screwing thigns up)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      p->pass = p->pass - winner->pass;
+      if(p->state != RUNNABLE){
+	continue;
+      }
+      p->pass = p->pass - lowestPass;
     }
     // Update chosen process's information
-    winner->pass = winner->pass + strideNumerator/(winner->numTickets)
-    winner->numTicks++;
+    lastSelectedPID = pSelected->pid;
+    pSelected->pass = pSelected->pass + STRIDENUMERATOR/(pSelected->numTickets)
+    pSelected->numTicks++;
     // Switch to chosen process.  It is the process's job
     // to release ptable.lock and then reacquire it
     // before jumping back to us.
-    proc = winner;
-    switchuvm(winner);
-    winner->state = RUNNING;
+    proc = pSelected;
+    switchuvm(pSelected);
+    pSelected->state = RUNNING;
     swtch(&cpu->scheduler, proc->context);
     switchkvm();
 
